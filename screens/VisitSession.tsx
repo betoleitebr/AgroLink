@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { dataStore } from '../services/dataStore';
 import { generateRTVReport } from '../services/geminiService';
-import { Visit } from '../types';
+import { Visit, Producer, Property } from '../types';
 
 const VisitSession: React.FC = () => {
   const { id } = useParams();
@@ -28,9 +28,28 @@ const VisitSession: React.FC = () => {
   const [report, setReport] = useState<{ summary: string; recommendations: string[] } | null>(null);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
 
-  const visit = dataStore.getVisits().find(v => v.id === id);
-  const producer = dataStore.getProducers().find(p => p.id === visit?.producerId);
-  const property = producer?.properties.find(prop => prop.id === visit?.propertyId);
+  // Fix: Converted synchronous data retrieval to async states
+  const [visit, setVisit] = useState<Visit | null>(null);
+  const [producer, setProducer] = useState<Producer | null>(null);
+  const [property, setProperty] = useState<Property | null>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const visits = await dataStore.getVisits();
+      const producers = await dataStore.getProducers();
+      const v = visits.find(visit => visit.id === id);
+      if (v) {
+        setVisit(v);
+        const prod = producers.find(p => p.id === v.producerId);
+        if (prod) {
+          setProducer(prod);
+          const prop = prod.properties.find(p => p.id === v.propertyId);
+          setProperty(prop || null);
+        }
+      }
+    };
+    loadData();
+  }, [id]);
 
   // Se a visita já foi completada e tentamos entrar nela, redireciona para o histórico
   useEffect(() => {
@@ -92,7 +111,7 @@ const VisitSession: React.FC = () => {
     };
 
     // 3. Atualizar no DataStore
-    dataStore.updateVisit(updatedVisit);
+    await dataStore.updateVisit(updatedVisit);
     
     // 4. Sincronizar dados para o monitoramento ATUAL do talhão (Visão de Dashboard)
     const updatedMonitoring = {
@@ -108,7 +127,7 @@ const VisitSession: React.FC = () => {
       p.id === property.id ? { ...p, monitoring: updatedMonitoring } : p
     );
     
-    dataStore.updateProducer({
+    await dataStore.updateProducer({
       ...producer,
       properties: updatedProperties
     });

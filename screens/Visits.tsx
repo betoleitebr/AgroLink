@@ -1,10 +1,10 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Search, Filter, Calendar, MapPin, CheckCircle2, Clock, 
   ArrowRight, MoreVertical, Plus, Trash2, Edit3, ChevronRight,
   Camera, FileText, User, Building2, LayoutGrid, List, Navigation,
-  CalendarPlus, X
+  CalendarPlus, X, Loader2, AlertCircle
 } from 'lucide-react';
 import { dataStore } from '../services/dataStore';
 import { Visit, Producer, Property } from '../types';
@@ -15,15 +15,37 @@ const Visits: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Estados para Modal de Agendamento Global
   const [showGlobalSchedule, setShowGlobalSchedule] = useState(false);
   const [selectedProducerId, setSelectedProducerId] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleNotes, setScheduleNotes] = useState('');
 
-  const visits = dataStore.getVisits();
-  const producers = dataStore.getProducers();
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [producers, setProducers] = useState<Producer[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const isLate = (dateStr: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const visitDate = new Date(dateStr);
+    visitDate.setHours(0, 0, 0, 0);
+    return visitDate < today;
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const [vData, pData] = await Promise.all([
+        dataStore.getVisits(),
+        dataStore.getProducers()
+      ]);
+      setVisits(vData || []);
+      setProducers(pData || []);
+      setLoading(false);
+    };
+    loadData();
+  }, []);
 
   const filteredVisits = useMemo(() => {
     return visits.filter(v => {
@@ -37,12 +59,20 @@ const Visits: React.FC = () => {
         return v.status !== 'completed' && matchesSearch;
       }
       return v.status === 'completed' && matchesSearch;
-    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    }).sort((a, b) => {
+      if (activeTab === 'pending') {
+        const aLate = isLate(a.date);
+        const bLate = isLate(b.date);
+        if (aLate && !bLate) return -1;
+        if (!aLate && bLate) return 1;
+      }
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
   }, [visits, activeTab, searchTerm, producers]);
 
   const selectedProducer = producers.find(p => p.id === selectedProducerId);
 
-  const handleCreateSchedule = () => {
+  const handleCreateSchedule = async () => {
     if (!selectedProducerId || !selectedPropertyId || !scheduleDate) {
       return alert("Por favor, preencha todos os campos obrigatórios.");
     }
@@ -56,7 +86,10 @@ const Visits: React.FC = () => {
       notes: scheduleNotes
     };
 
-    dataStore.addVisit(newVisit);
+    await dataStore.addVisit(newVisit);
+    const updated = await dataStore.getVisits();
+    setVisits(updated);
+    
     setShowGlobalSchedule(false);
     setSelectedProducerId('');
     setSelectedPropertyId('');
@@ -70,6 +103,8 @@ const Visits: React.FC = () => {
     const [year, month, day] = isoString.split('-');
     return `${day}/${month}/${year}`;
   };
+
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-emerald-500 mb-4" /> Carregando agenda...</div>;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
@@ -132,45 +167,60 @@ const Visits: React.FC = () => {
           filteredVisits.map((visit) => {
             const producer = producers.find(p => p.id === visit.producerId);
             const property = producer?.properties.find(prop => prop.id === visit.propertyId);
+            const visitLate = activeTab === 'pending' && isLate(visit.date);
             
             return (
               <div 
                 key={visit.id}
                 onClick={() => navigate(`/visit-session/${visit.id}`)}
-                className="bg-white rounded-[28px] p-6 shadow-sm border border-gray-100 hover:shadow-md transition-all cursor-pointer group"
+                className={`bg-white rounded-[28px] p-6 shadow-sm border transition-all cursor-pointer group ${
+                  visitLate ? 'border-red-200 bg-red-50 hover:bg-red-100/50 hover:border-red-300' : 'border-gray-100 hover:shadow-md'
+                }`}
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                   <div className="flex items-start gap-4">
-                    <div className={`p-4 rounded-2xl ${activeTab === 'pending' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-50 text-gray-400'}`}>
-                      {activeTab === 'pending' ? <Calendar size={24} /> : <CheckCircle2 size={24} />}
+                    <div className={`p-4 rounded-2xl ${
+                      visitLate ? 'bg-red-100 text-red-600' : 
+                      activeTab === 'pending' ? 'bg-emerald-50 text-emerald-600' : 
+                      'bg-gray-50 text-gray-400'
+                    }`}>
+                      {visitLate ? <AlertCircle size={24} className="animate-pulse" /> : activeTab === 'pending' ? <Calendar size={24} /> : <CheckCircle2 size={24} />}
                     </div>
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-bold text-gray-900 group-hover:text-emerald-600 transition-colors">{producer?.name}</h3>
-                        <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md uppercase">{property?.cropType}</span>
+                        <h3 className={`text-lg font-bold group-hover:text-emerald-600 transition-colors ${visitLate ? 'text-red-900' : 'text-gray-900'}`}>{producer?.name}</h3>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase ${visitLate ? 'bg-red-200 text-red-800' : 'bg-emerald-50 text-emerald-600'}`}>{property?.cropType}</span>
+                        {visitLate && <span className="text-[10px] font-black text-red-600 uppercase tracking-widest ml-2 animate-pulse">Atrasada</span>}
                       </div>
-                      <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
-                        <Building2 size={14} className="text-gray-300" /> {property?.name} • {producer?.location.city}, {producer?.location.state}
+                      <p className={`text-sm font-medium flex items-center gap-2 ${visitLate ? 'text-red-700/60' : 'text-gray-500'}`}>
+                        <Building2 size={14} className={visitLate ? 'text-red-400' : 'text-gray-300'} /> {property?.name} • {producer?.location.city}, {producer?.location.state}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between md:justify-end gap-10">
                     <div className="space-y-1 text-right">
-                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Agendado para</p>
-                       <p className="text-sm font-bold text-gray-900 flex items-center justify-end gap-2">
-                         <Calendar size={14} className="text-emerald-500" /> {safeFormatDate(visit.date)}
+                       <p className={`text-[10px] font-bold uppercase tracking-widest ${visitLate ? 'text-red-400' : 'text-gray-400'}`}>Data Programada</p>
+                       <p className={`text-sm font-bold flex items-center justify-end gap-2 ${visitLate ? 'text-red-600' : 'text-gray-900'}`}>
+                         <Calendar size={14} className={visitLate ? 'text-red-500' : 'text-emerald-500'} /> {safeFormatDate(visit.date)}
                        </p>
                     </div>
                     
                     <div className="flex items-center gap-4">
                        <div className="hidden sm:block text-right">
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</p>
-                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${visit.status === 'completed' ? 'text-emerald-600 bg-emerald-50' : 'text-sky-600 bg-sky-50'}`}>
-                             {visit.status === 'completed' ? 'Concluída' : 'Pendente'}
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${
+                            visitLate ? 'text-red-600 bg-red-100 border border-red-200' :
+                            visit.status === 'completed' ? 'text-emerald-600 bg-emerald-50' : 
+                            'text-sky-600 bg-sky-50'
+                          }`}>
+                             {visitLate ? 'Atrasada' : visit.status === 'completed' ? 'Concluída' : 'Pendente'}
                           </span>
                        </div>
-                       <div className="p-3 bg-gray-50 text-gray-300 group-hover:bg-emerald-500 group-hover:text-white rounded-2xl transition-all">
+                       <div className={`p-3 rounded-2xl transition-all ${
+                         visitLate ? 'bg-red-200 text-red-600 group-hover:bg-red-600 group-hover:text-white' : 
+                         'bg-gray-50 text-gray-300 group-hover:bg-emerald-500 group-hover:text-white'
+                       }`}>
                           <ChevronRight size={20} />
                        </div>
                     </div>
@@ -178,11 +228,11 @@ const Visits: React.FC = () => {
                 </div>
 
                 {visit.notes && (
-                  <div className="mt-4 pt-4 border-t border-gray-50">
-                    <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1 flex items-center gap-2">
+                  <div className={`mt-4 pt-4 border-t ${visitLate ? 'border-red-200' : 'border-gray-50'}`}>
+                    <p className={`text-xs font-bold uppercase tracking-widest mb-1 flex items-center gap-2 ${visitLate ? 'text-red-500' : 'text-gray-400'}`}>
                       <FileText size={12} /> Objetivo da Visita
                     </p>
-                    <p className="text-xs text-gray-500 italic line-clamp-2">{visit.notes}</p>
+                    <p className={`text-xs italic line-clamp-2 ${visitLate ? 'text-red-900/60' : 'text-gray-500'}`}>{visit.notes}</p>
                   </div>
                 )}
               </div>

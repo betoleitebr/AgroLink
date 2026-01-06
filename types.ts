@@ -30,6 +30,15 @@ export interface ConversationNote {
   content: string;
 }
 
+export interface ContactItem {
+  id: string;
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+  isPrimary?: boolean;
+}
+
 export interface Producer {
   id: string;
   name: string;
@@ -59,13 +68,10 @@ export interface Producer {
     infrastructure: string[];
   };
   contacts: {
-    owner: string;
-    manager: string;
-    techResponsible: string;
     phone: string;
     email: string;
     whatsapp: string;
-    list?: { id: string; name: string; role: string; phone: string; email: string; }[];
+    list: ContactItem[];
   };
   commercial: {
     creditLimit: number;
@@ -73,10 +79,16 @@ export interface Producer {
     paymentTerms: string;
     origin: string;
   };
+  history?: {
+    registrationDate: string;
+    origin: string;
+    observations: string;
+  };
   properties: Property[];
 }
 
 export interface SoilFertility {
+  id?: string;
   analysisDate: string;
   ph: number;
   organicMatter: number;
@@ -208,7 +220,6 @@ export interface Proposal {
   contactId?: string; 
   farmName: string;
   activityGroups: ActivityGroup[]; 
-  priority: 'baixa' | 'media' | 'alta';
   totalValue: number;
   paymentMethod: string;
   validityDate: string;

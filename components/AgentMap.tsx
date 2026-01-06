@@ -3,13 +3,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapPin, Navigation } from 'lucide-react';
 import { getCurrentLocation } from '../services/weatherService';
-import { MOCK_PRODUCERS } from '../constants';
+import { dataStore } from '../services/dataStore';
+import { Producer } from '../types';
 
 const AgentMap: React.FC = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletMap = useRef<L.Map | null>(null);
   const agentMarker = useRef<L.Marker | null>(null);
   const [coords, setCoords] = useState<[number, number] | null>(null);
+  const [producers, setProducers] = useState<Producer[]>([]);
 
   useEffect(() => {
     if (!mapRef.current || leafletMap.current) return;
@@ -24,21 +26,34 @@ const AgentMap: React.FC = () => {
       maxZoom: 19,
     }).addTo(leafletMap.current);
 
-    // Adiciona as propriedades dos produtores ao mapa
-    MOCK_PRODUCERS.forEach(producer => {
-      producer.properties.forEach(prop => {
-        const marker = L.circleMarker([prop.coordinates.lat, prop.coordinates.lng], {
-          radius: 8,
-          fillColor: '#10b981',
-          color: '#fff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.8
-        }).addTo(leafletMap.current!);
+    // Carregar produtores do banco de dados
+    const loadProducers = async () => {
+      try {
+        const data = await dataStore.getProducers();
+        setProducers(data);
         
-        marker.bindPopup(`<b>${producer.name}</b><br>${prop.name} (${prop.cropType})`);
-      });
-    });
+        if (leafletMap.current) {
+          data.forEach(producer => {
+            producer.properties.forEach(prop => {
+              const marker = L.circleMarker([prop.coordinates.lat, prop.coordinates.lng], {
+                radius: 8,
+                fillColor: '#10b981',
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+              }).addTo(leafletMap.current!);
+              
+              marker.bindPopup(`<b>${producer.name}</b><br>${prop.name} (${prop.cropType})`);
+            });
+          });
+        }
+      } catch (err) {
+        console.error("Erro ao carregar produtores no mapa:", err);
+      }
+    };
+
+    loadProducers();
 
     // Tenta obter a localização real
     const trackLocation = async () => {
@@ -65,7 +80,7 @@ const AgentMap: React.FC = () => {
             .bindPopup('Você está aqui (Consultor de Campo)');
         }
       } catch (err) {
-        console.error("Erro ao rastrear localização para o mapa:", err);
+        console.warn("Aviso: Falha ao rastrear localização do agente:", err instanceof Error ? err.message : String(err));
       }
     };
 

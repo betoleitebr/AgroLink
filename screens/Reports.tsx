@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart3, TrendingUp, DollarSign, Leaf, Activity, 
   ArrowUpRight, ArrowDownRight, Sparkles, Filter, 
@@ -24,9 +24,41 @@ const Reports: React.FC = () => {
   const [fieldAnalysis, setFieldAnalysis] = useState<string | null>(null);
   const [isAnalyzingField, setIsAnalyzingField] = useState(false);
 
-  const producers = dataStore.getProducers();
-  const proposals = dataStore.getProposals();
-  const visits = dataStore.getVisits();
+  const [producers, setProducers] = useState<Producer[]>([]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(val);
+  };
+
+  const safeFormatDate = (isoString: string) => {
+    if (!isoString) return '';
+    const [year, month, day] = isoString.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const [pData, propData, vData] = await Promise.all([
+        dataStore.getProducers(),
+        dataStore.getProposals(),
+        dataStore.getVisits()
+      ]);
+      setProducers(pData || []);
+      setProposals(propData || []);
+      setVisits(vData || []);
+      setLoading(false);
+    };
+    loadData();
+  }, []);
 
   const stats = useMemo(() => {
     const allProps = producers.flatMap(p => p.properties);
@@ -69,7 +101,7 @@ const Reports: React.FC = () => {
   const handleGenerateInsights = async () => {
     setIsGenerating(true);
     const result = await generateStrategicInsights(stats);
-    setInsights(result);
+    setInsights(String(result || ''));
     setIsGenerating(false);
   };
 
@@ -102,29 +134,20 @@ const Reports: React.FC = () => {
       managementStatus: 'Aplicações em 75%'
     });
 
-    setFieldAnalysis(analysis);
+    setFieldAnalysis(String(analysis || ''));
     setIsAnalyzingField(false);
-  };
-
-  const handleAnalyzeSpecificReport = async () => {
-    if (!selectedReport) return;
-    setIsAnalyzingReport(true);
-    const dataString = selectedReport.title === 'Performance Produtiva' 
-      ? stats.rankedProperties.slice(0, 5).map(p => `${p.name} (${p.cropType}): ${p.economic?.profitability}% eficiência`).join(', ')
-      : "Dados operacionais diversos.";
-    const analysis = await generateDetailedReportAnalysis(selectedReport.title, dataString);
-    setReportAnalysis(analysis);
-    setIsAnalyzingReport(false);
   };
 
   const executiveReports = [
     { id: 'prod', title: 'Performance Produtiva', desc: 'Ranking de talhões e evolução de produtividade.', icon: Beaker, color: 'text-purple-500' },
-    { id: 'fin', title: 'Custos e Rentabilidade', desc: 'Detalhamento de custos/ha e margens por safra.', icon: DollarSign, color: 'text-emerald-500' },
+    { id: 'fin', title: 'Custos e Rentabilidade', desc: 'Detalhamento de custos/ha e margens por safras.', icon: DollarSign, color: 'text-emerald-500' },
     { id: 'risk', title: 'Riscos e Clima', desc: 'Impacto de chuvas e eventos extremos na produção.', icon: CloudRain, color: 'text-sky-500' },
-    { id: 'sales', title: 'Funil Comercial', desc: 'Taxas de conversão e velocidade de negociação.', icon: Briefcase, color: 'text-orange-500' },
+    { id: 'sales', title: 'Funil Comercial', desc: 'Taxas de conversão e datas de fechamento previstas.', icon: Briefcase, color: 'text-orange-500' },
     { id: 'legal', title: 'Conformidade Legal', desc: 'Relatório de defensivos e selos ambientais.', icon: ShieldCheck, color: 'text-red-500' },
     { id: 'serv', title: 'Serviços Prestados', desc: 'Valor gerado pelas visitas e consultoria técnica.', icon: CheckCircle2, color: 'text-emerald-600' },
   ];
+
+  if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-emerald-500 mb-4" /> Carregando BI...</div>;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -172,41 +195,96 @@ const Reports: React.FC = () => {
         </div>
       </section>
 
-      {/* DASHBOARD PRINCIPAL DE REPORTES */}
+      {/* EXECUTIVE REPORTS DASHBOARD */}
       <section className="bg-white rounded-[48px] p-10 border border-gray-100 shadow-sm">
          <div className="flex justify-between items-center mb-10">
             <h3 className="text-2xl font-black text-gray-900 tracking-tighter">Relatórios Executivos</h3>
          </div>
          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {executiveReports.map((rep) => (
-              <div key={rep.id} onClick={() => handleOpenReport(rep)} className="p-6 rounded-[32px] bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-xl hover:border-emerald-100 transition-all group cursor-pointer">
-                 <div className={`p-4 rounded-2xl bg-white shadow-sm mb-6 w-fit transition-transform group-hover:-translate-y-1 ${rep.color}`}>
-                    <rep.icon size={24} />
-                 </div>
-                 <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-emerald-600 transition-colors">{rep.title}</h4>
-                 <p className="text-xs text-gray-500 font-medium leading-relaxed">{rep.desc}</p>
-                 <div className="mt-6 pt-6 border-t border-gray-100 flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all">
-                    Acessar Relatório <ArrowRight size={14} />
-                 </div>
-              </div>
-            ))}
+            {executiveReports.map((rep) => {
+              const Icon = rep.icon;
+              return (
+                <div key={rep.id} onClick={() => handleOpenReport(rep)} className="p-6 rounded-[32px] bg-gray-50 border border-gray-100 hover:bg-white hover:shadow-xl hover:border-emerald-100 transition-all group cursor-pointer">
+                   <div className={`p-4 rounded-2xl bg-white shadow-sm mb-6 w-fit transition-transform group-hover:-translate-y-1 ${rep.color}`}>
+                      <Icon size={24} />
+                   </div>
+                   <h4 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-emerald-600 transition-colors">{rep.title}</h4>
+                   <p className="text-xs text-gray-500 font-medium leading-relaxed">{rep.desc}</p>
+                   <div className="mt-6 pt-6 border-t border-gray-100 flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all">
+                      Acessar Relatório <ArrowRight size={14} />
+                   </div>
+                </div>
+              );
+            })}
          </div>
       </section>
 
-      {/* MODAL DE RELATÓRIO DETALHADO (LEVEL 1) */}
+      {/* REPORT MODAL */}
       {selectedReport && !selectedField && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
            <div className="bg-white rounded-[48px] w-full max-w-5xl max-h-[92vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in duration-300">
               <div className="p-8 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
                 <div className="flex items-center gap-5">
-                   <div className={`p-5 rounded-3xl bg-white shadow-lg ${selectedReport.color}`}><selectedReport.icon size={32} /></div>
+                   {(() => {
+                     const Icon = selectedReport.icon;
+                     return (
+                       <div className={`p-5 rounded-3xl bg-white shadow-lg ${selectedReport.color}`}><Icon size={32} /></div>
+                     );
+                   })()}
                    <div><h3 className="text-3xl font-black text-gray-900 tracking-tighter">{selectedReport.title}</h3><p className="text-xs text-gray-400 font-bold uppercase tracking-widest">Painel Técnico Detalhado</p></div>
                 </div>
                 <button onClick={() => setSelectedReport(null)} className="p-3 bg-gray-900 text-white rounded-2xl shadow-xl hover:scale-105 transition-all"><X size={24}/></button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
-                {selectedReport.id === 'prod' ? (
+                {selectedReport.id === 'sales' ? (
+                  <div className="space-y-10">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                       <div className="p-8 bg-gray-50 rounded-[32px] border border-gray-100">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Ticket Médio / Proposta</p>
+                          <h5 className="text-2xl font-black text-gray-900">{formatCurrency(stats.totalProposalsValue / (proposals.length || 1))}</h5>
+                       </div>
+                       <div className="p-8 bg-gray-50 rounded-[32px] border border-gray-100">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Taxa de Conversão</p>
+                          <h5 className="text-4xl font-black text-emerald-600">{stats.conversionRate.toFixed(1)}%</h5>
+                       </div>
+                       <div className="p-8 bg-gray-50 rounded-[32px] border border-gray-100">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Previsão Fechamentos</p>
+                          <h5 className="text-4xl font-black text-sky-600">{proposals.filter(p => p.closingProbability >= 80).length}</h5>
+                       </div>
+                    </div>
+
+                    <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
+                       <table className="w-full text-left">
+                          <thead className="bg-gray-50/50">
+                             <tr>
+                                <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase">Proposta</th>
+                                <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase">Previsão</th>
+                                <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase text-center">Confiança</th>
+                                <th className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase text-right">Valor</th>
+                             </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                             {proposals.map((p) => (
+                                <tr key={p.id} className="hover:bg-gray-50 transition-all">
+                                   <td className="px-8 py-5">
+                                      <p className="text-sm font-bold text-gray-900">{p.title}</p>
+                                      <p className="text-[10px] text-gray-400 uppercase">{p.farmName}</p>
+                                   </td>
+                                   <td className="px-8 py-5 text-xs font-bold text-gray-600">{safeFormatDate(p.expectedClosingDate)}</td>
+                                   <td className="px-8 py-5">
+                                      <div className="flex items-center justify-center gap-2">
+                                         <span className={`text-[10px] font-black px-2 py-1 rounded-md ${p.closingProbability >= 80 ? 'bg-emerald-100 text-emerald-700' : p.closingProbability >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{p.closingProbability}%</span>
+                                      </div>
+                                   </td>
+                                   <td className="px-8 py-5 text-right font-black text-gray-900">{formatCurrency(p.totalValue)}</td>
+                                </tr>
+                             ))}
+                          </tbody>
+                       </table>
+                    </div>
+                  </div>
+                ) : selectedReport.id === 'prod' ? (
                    <div className="space-y-10">
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                          <div className="p-8 bg-gray-50 rounded-[32px] border border-gray-100">
@@ -266,7 +344,7 @@ const Reports: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL DE DEEP DIVE DO TALHÃO (LEVEL 2) */}
+      {/* FIELD DEEP DIVE MODAL */}
       {selectedField && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-xl p-4 animate-in fade-in duration-300">
            <div className="bg-[#0B0F19] rounded-[56px] w-full max-w-6xl max-h-[95vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in duration-300 border border-white/10 text-white">
@@ -288,8 +366,6 @@ const Reports: React.FC = () => {
               </div>
 
               <div className="flex-1 overflow-y-auto p-12 space-y-12 custom-scrollbar">
-                
-                {/* 1. KPIs DE PORQUÊ (EFICIÊNCIA) */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                    <div className="bg-white/5 p-8 rounded-[40px] border border-white/10 flex flex-col justify-between h-48 group hover:bg-emerald-500/10 transition-all">
                       <div className="flex justify-between items-start">
@@ -307,7 +383,7 @@ const Reports: React.FC = () => {
                          <DollarSign size={20} className="text-orange-500" />
                       </div>
                       <div>
-                         <h4 className="text-4xl font-black">R$ {selectedField.economic?.inputCost?.toLocaleString('pt-BR') || '4.500'}</h4>
+                         <h4 className="text-4xl font-black">{formatCurrency(selectedField.economic?.inputCost || 4500)}</h4>
                          <p className="text-[10px] text-orange-500 mt-2 font-bold">110% do Orçado (Atraso)</p>
                       </div>
                    </div>
@@ -333,7 +409,6 @@ const Reports: React.FC = () => {
                    </div>
                 </div>
 
-                {/* 2. RECOMENDAÇÃO AUTOMÁTICA GEMINI */}
                 <div className="bg-gradient-to-r from-emerald-900/40 to-sky-900/40 rounded-[48px] p-10 border border-white/10 relative overflow-hidden">
                    <Sparkles className="absolute -right-10 -bottom-10 opacity-10" size={200} />
                    <div className="relative z-10 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-12">
@@ -359,7 +434,6 @@ const Reports: React.FC = () => {
                    </div>
                 </div>
 
-                {/* 3. MANEJO DE DEFENSIVOS & ESTÁDIO */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
                    <div className="bg-white/5 rounded-[48px] p-10 border border-white/10 space-y-8">
                       <div className="flex justify-between items-center">
@@ -385,7 +459,6 @@ const Reports: React.FC = () => {
                       </div>
                    </div>
 
-                   {/* COMPARATIVO ENTRE SAFRAS (DADOS BI) */}
                    <div className="bg-white rounded-[48px] p-10 border border-white/10 space-y-8 text-gray-900 bg-emerald-50">
                       <div className="flex justify-between items-center">
                          <h5 className="text-lg font-black uppercase tracking-tighter text-emerald-900 flex items-center gap-3"><History size={20}/> Histórico Inter-Safra</h5>
@@ -419,29 +492,6 @@ const Reports: React.FC = () => {
                       </div>
                    </div>
                 </div>
-
-                {/* 4. DECISÕES RÁPIDAS BASEADAS EM FATOS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   <div className="p-8 bg-white/5 rounded-[40px] border border-white/10 border-l-emerald-500 border-l-8">
-                      <h6 className="text-sm font-black uppercase text-emerald-400 mb-3">Decisão de Manejo: Nitrogenada</h6>
-                      <p className="text-sm text-gray-400 leading-relaxed">Fatos: Solo com pH 6.2 e V% em 65%. Decisão: Realizar aplicação complementar de cobertura na próxima janela de umidade para garantir o teto produtivo.</p>
-                      <button className="mt-6 bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase hover:scale-105 transition-all">Aprovar Recomendação</button>
-                   </div>
-                   <div className="p-8 bg-white/5 rounded-[40px] border border-white/10 border-l-orange-500 border-l-8">
-                      <h6 className="text-sm font-black uppercase text-orange-400 mb-3">Decisão Comercial: Antecipação Colheita</h6>
-                      <p className="text-sm text-gray-400 leading-relaxed">Fatos: Risco climático alto para janeiro. Decisão: Antecipar logística de transporte para 25/02 e fixar preço de 20% do lote restante.</p>
-                      <button className="mt-6 bg-orange-500 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase hover:scale-105 transition-all">Agendar Logística</button>
-                   </div>
-                </div>
-
-              </div>
-
-              <div className="p-8 border-t border-white/5 bg-white/5 flex justify-between items-center">
-                 <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500 shadow-inner"><Info size={24}/></div>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase max-w-sm leading-tight italic">Dados compilados do ERP AgroLink Core. Projeções sujeitas a variáveis climáticas não lineares.</p>
-                 </div>
-                 <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">FIELD INTELLIGENCE UNIT • AGROLINK</p>
               </div>
            </div>
         </div>

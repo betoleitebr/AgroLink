@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { ConversationNote } from "../types";
 
@@ -29,8 +28,14 @@ export const generateRTVReport = async (notes: string, cropType: string) => {
       }
     });
 
-    const text = response.text || "{}";
-    return JSON.parse(text.trim());
+    const text = response.text?.trim() || "{}";
+    const parsed = JSON.parse(text);
+    return {
+      summary: String(parsed.summary || "Visita realizada com sucesso."),
+      recommendations: Array.isArray(parsed.recommendations) 
+        ? parsed.recommendations.map(String) 
+        : ["Monitorar evolução do talhão"]
+    };
   } catch (error) {
     console.error("Erro ao gerar relatório RTV:", error);
     return {
@@ -64,7 +69,7 @@ export const generateFieldDeepAnalysis = async (data: any) => {
       3. Forneça 2 decisões rápidas baseadas em fatos.
       4. Responda em Português do Brasil de forma executiva e direta.`,
     });
-    return response.text?.trim() || "Análise indisponível.";
+    return response.text?.trim() || "Análise indisponível no momento.";
   } catch (error) {
     console.error("Erro no Deep Analysis Gemini:", error);
     return "Falha ao correlacionar dados para decisão rápida.";

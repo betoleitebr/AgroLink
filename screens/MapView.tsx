@@ -106,13 +106,23 @@ const MapView: React.FC = () => {
 
   const calculateArea = (layer: any): number => {
     if (!layer) return 0;
+
+    // Cálculo para Círculos (Circunferências)
+    if (typeof layer.getRadius === 'function') {
+      const radius = layer.getRadius();
+      return Math.PI * Math.pow(radius, 2);
+    }
+
+    // Cálculo para Polígonos e Retângulos
     if (typeof layer.getLatLngs === 'function') {
       let latlngs = layer.getLatLngs();
       if (Array.isArray(latlngs[0])) latlngs = latlngs[0];
       if (!latlngs || latlngs.length < 3) return 0;
+      
       let area = 0;
       const radius = 6378137;
       const degToRad = Math.PI / 180;
+      
       for (let i = 0; i < latlngs.length; i++) {
         const p1 = latlngs[i];
         const p2 = latlngs[(i + 1) % latlngs.length];
@@ -157,7 +167,15 @@ const MapView: React.FC = () => {
     };
     initMapData();
 
-    map.pm.addControls({ position: 'topleft', drawRectangle: true, drawPolygon: true, editMode: true, removalMode: true });
+    map.pm.addControls({ 
+      position: 'topleft', 
+      drawRectangle: true, 
+      drawPolygon: true, 
+      drawCircle: true, // Habilitado para circunferências
+      editMode: true, 
+      removalMode: true 
+    });
+
     map.on('pm:create', (e: any) => {
       const layer = e.layer;
       setPendingLayer(layer);
@@ -183,7 +201,6 @@ const MapView: React.FC = () => {
     }
   };
 
-  // Calculo dinâmico de rentabilidade (Lucro / Custo) * 100
   const totalCost = formData.economic.inputCost + formData.economic.operationalCost;
   const projectedMargin = formData.economic.estimatedRevenue - totalCost;
   const currentProfitability = totalCost > 0 
@@ -193,6 +210,8 @@ const MapView: React.FC = () => {
   const handleConfirm = async () => {
     if (!formData.name) return alert("Dê um nome ao talhão");
     let center = { lat: 0, lng: 0 };
+    
+    // Suporte para centro de círculos e polígonos
     if (pendingLayer.getBounds) center = pendingLayer.getBounds().getCenter();
     else if (pendingLayer.getLatLng) center = pendingLayer.getLatLng();
 
@@ -206,7 +225,7 @@ const MapView: React.FC = () => {
     const newProperty: Property = {
       id: `prop-${Date.now()}`,
       name: formData.name,
-      area: Number((formData.areaM2 / 10000).toFixed(2)),
+      area: Number((formData.areaM2 / 10000).toFixed(2)), // Convertendo m2 para Hectares
       cropType: formData.cropType,
       coordinates: { lat: center.lat, lng: center.lng },
       polygonCoords: polygonCoords.length > 0 ? polygonCoords : undefined,

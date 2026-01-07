@@ -108,7 +108,8 @@ export interface CropHistory {
   variety: string;
   plantingSystem: string;
   plantingDate: string;
-  harvestDate: string;
+  harvestDate: string; // Previsão
+  actualHarvestDate?: string; // Realizada
   plantPopulation: number;
   spacing: string;
 }

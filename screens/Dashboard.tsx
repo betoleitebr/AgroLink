@@ -4,7 +4,7 @@ import {
   Sun, CloudRain, Thermometer, Wind, Droplets, ArrowRight, CheckCircle2, 
   Clock, MapPin, Loader2, Cloud, Navigation, AlertTriangle, Sparkles, 
   ChevronRight, Plus, Briefcase, FileText, UserPlus, TrendingUp, AlertCircle,
-  Target, Calendar
+  Target, Calendar, BellRing, Smartphone, MessageSquare
 } from 'lucide-react';
 import { dataStore } from '../services/dataStore';
 import { Link, useNavigate } from 'react-router-dom';
@@ -101,10 +101,13 @@ const Dashboard: React.FC = () => {
 
   const stats = useMemo(() => {
     const allProps = producers.flatMap(p => p.properties);
-    const totalArea = allProps.reduce((acc, p) => acc + (p.area || 0), 0);
-    const totalPipeline = proposals.reduce((acc, p) => acc + p.totalValue, 0);
+    const totalArea = allProps.reduce((acc, p) => acc + Number(p.area || 0), 0);
+    const totalPipeline = proposals.reduce((acc, p) => acc + Number(p.totalValue || 0), 0);
     const highConfidenceProposals = proposals.filter(p => p.closingProbability >= 80);
-    const weighted = proposals.reduce((acc, p) => acc + (p.totalValue * (p.closingProbability / 100)), 0);
+    const weighted = proposals.reduce((acc, p) => acc + (Number(p.totalValue || 0) * (p.closingProbability / 100)), 0);
+
+    const today = new Date().toISOString().split('T')[0];
+    const dueFollowUps = proposals.filter(p => p.nextContactDate && p.nextContactDate <= today);
 
     return {
       totalProducers: producers.length,
@@ -115,6 +118,7 @@ const Dashboard: React.FC = () => {
       avgProb: proposals.length > 0 ? proposals.reduce((acc, p) => acc + p.closingProbability, 0) / proposals.length : 0,
       mainCrops: Array.from(new Set(allProps.map(p => p.cropType))),
       highConfidenceProposals: highConfidenceProposals.sort((a, b) => new Date(a.expectedClosingDate).getTime() - new Date(b.expectedClosingDate).getTime()),
+      dueFollowUps: dueFollowUps.sort((a, b) => new Date(a.nextContactDate!).getTime() - new Date(b.nextContactDate!).getTime()),
       alertsCount: 0 
     };
   }, [producers, proposals]);
@@ -137,6 +141,20 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700 pb-12">
+      {/* NOTIFICAÇÃO DE FOLLOW-UP */}
+      {stats.dueFollowUps.length > 0 && (
+        <div className="bg-amber-500 text-white px-8 py-4 rounded-[32px] shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4 animate-bounce-short">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-white/20 rounded-2xl"><BellRing className="animate-pulse" size={24}/></div>
+            <div>
+              <h4 className="font-black text-sm uppercase tracking-widest">Follow-ups Pendentes</h4>
+              <p className="text-xs font-bold text-amber-50 opacity-90">Você possui {stats.dueFollowUps.length} ações de contato agendadas para hoje ou em atraso.</p>
+            </div>
+          </div>
+          <button onClick={() => navigate('/proposals')} className="bg-white text-amber-600 px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:scale-105 transition-all">Ver Agora</button>
+        </div>
+      )}
+
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h2 className="text-sm font-black text-emerald-600 uppercase tracking-[0.3em] mb-1">{CLIENT_BRAND.corporateName}</h2>
@@ -151,7 +169,7 @@ const Dashboard: React.FC = () => {
         </div>
       </header>
 
-      {/* Metric Cards - Fixed Leading Zeros and Labels */}
+      {/* Metric Cards */}
       <section className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="flex items-center gap-4">
           <div className="p-4 bg-gray-900 text-white rounded-2xl shadow-lg"><TrendingUp size={24}/></div>
@@ -230,11 +248,6 @@ const Dashboard: React.FC = () => {
 
           {/* Map Monitoring */}
           <section className="bg-white rounded-[40px] p-2 shadow-sm border border-gray-100 h-[400px] relative overflow-hidden group">
-             <div className="absolute top-6 left-6 z-10 bg-white/90 backdrop-blur-md px-4 py-2 rounded-2xl border border-gray-200 shadow-lg">
-                <div className="flex items-center gap-2 font-black text-[10px] text-gray-900 uppercase">
-                  <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" /> Live Map Monitoring
-                </div>
-             </div>
              <AgentMap />
           </section>
         </div>
@@ -273,8 +286,30 @@ const Dashboard: React.FC = () => {
               <Clock className="text-emerald-500" size={24} />
             </div>
             
-            <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar pr-2">
-              {/* High Confidence Proposals (Closings) */}
+            <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar pr-2">
+              {/* Follow-ups Today */}
+              {stats.dueFollowUps.length > 0 && (
+                <div className="animate-in slide-in-from-top duration-500">
+                  <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3 ml-2 flex items-center gap-2">
+                    <BellRing size={12} /> Ações de Follow-up
+                  </p>
+                  <div className="space-y-3">
+                    {stats.dueFollowUps.slice(0, 3).map(p => (
+                      <Link key={p.id} to="/proposals" className="block bg-amber-50 border border-amber-100 p-4 rounded-2xl hover:bg-amber-100 transition-all group">
+                         <div className="flex justify-between items-start mb-2">
+                            <span className="text-[9px] font-black text-amber-700 bg-white px-2 py-0.5 rounded-lg border border-amber-200 shadow-sm">Ativo</span>
+                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tighter flex items-center gap-1">
+                              <BellRing size={10} /> {safeFormatDate(p.nextContactDate)}
+                            </span>
+                         </div>
+                         <h4 className="text-xs font-black text-gray-900 truncate group-hover:text-amber-700">{p.title}</h4>
+                         <p className="text-[10px] font-bold text-amber-700/60 uppercase">{p.farmName}</p>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {stats.highConfidenceProposals.length > 0 && (
                 <div className="mb-4">
                   <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-3 ml-2">Fechamentos Previstos</p>
@@ -288,50 +323,54 @@ const Dashboard: React.FC = () => {
                             </span>
                          </div>
                          <h4 className="text-xs font-black text-gray-900 truncate group-hover:text-emerald-600">{p.title}</h4>
-                         <p className="text-[10px] font-bold text-gray-400 uppercase">{p.farmName} • {formatCurrency(p.totalValue)}</p>
+                         <p className="text-[10px] font-bold text-gray-400 uppercase">{p.farmName} • {formatCurrency(Number(p.totalValue || 0))}</p>
                       </Link>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Pending Visits */}
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2">Agenda Técnica</p>
-              {loadingData ? (
-                 <div className="py-20 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
-              ) : pendingVisits.length === 0 ? (
-                 <div className="py-10 text-center text-xs font-bold text-gray-400 italic">Sem visitas agendadas.</div>
-              ) : pendingVisits.slice(0, 3).map((v) => {
-                const prod = producers.find(p => p.id === v.producerId);
-                const prop = prod?.properties.find(p => p.id === v.propertyId);
-                const visitLate = isLate(v.date);
-                const formattedDate = safeFormatDate(v.date);
-
-                return (
-                  <Link 
-                    key={v.id} 
-                    to={`/visit-session/${v.id}`} 
-                    className={`group block bg-white p-4 rounded-2xl border transition-all relative overflow-hidden ${
-                      visitLate ? 'border-red-200 bg-red-50 shadow-red-50' : 'border-gray-100 shadow-sm hover:border-emerald-100'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <h4 className={`text-xs font-black truncate transition-colors ${visitLate ? 'text-red-900' : 'text-gray-900'}`}>{prod?.name}</h4>
-                      <span className={`text-[10px] font-black uppercase ${visitLate ? 'text-red-600' : 'text-gray-400'}`}>{formattedDate}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-gray-500">
-                      <MapPin size={10} className={visitLate ? 'text-red-600' : 'text-emerald-500'} />
-                      <span className="text-[10px] font-bold truncate">{prop?.name} ({prop?.cropType})</span>
-                    </div>
-                  </Link>
-                );
-              })}
+              <div>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-2">Agenda Técnica</p>
+                {loadingData ? (
+                   <div className="py-20 text-center"><Loader2 className="animate-spin text-emerald-500 mx-auto" /></div>
+                ) : pendingVisits.length === 0 ? (
+                   <div className="py-10 text-center text-xs font-bold text-gray-400 italic">Sem visitas agendadas.</div>
+                ) : pendingVisits.slice(0, 3).map((v) => {
+                  const prod = producers.find(p => p.id === v.producerId);
+                  const prop = prod?.properties.find(p => p.id === v.propertyId);
+                  const formattedDate = safeFormatDate(v.date);
+                  return (
+                    <Link 
+                      key={v.id} 
+                      to={`/visit-session/${v.id}`} 
+                      className="group block bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:border-emerald-100 transition-all mb-3"
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <h4 className="text-xs font-black text-gray-900 truncate">{prod?.name}</h4>
+                        <span className="text-[10px] font-black text-gray-400 uppercase">{formattedDate}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-gray-500">
+                        <MapPin size={10} className="text-emerald-500" />
+                        <span className="text-[10px] font-bold truncate">{prop?.name} ({prop?.cropType})</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-            
-            <button onClick={() => navigate('/visits')} className="mt-6 w-full py-3 bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Ver Agenda Completa</button>
           </section>
         </div>
       </div>
+      <style>{`
+        @keyframes bounce-short {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+        .animate-bounce-short {
+          animation: bounce-short 2s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 };

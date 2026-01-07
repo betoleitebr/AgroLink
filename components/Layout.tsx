@@ -1,5 +1,9 @@
-import React from 'react';
-import { Home, Map as MapIcon, FileText, User, Bell, Briefcase, ShoppingBag, LogOut, Users2, BarChart3, Sparkles } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { 
+  Home, Map as MapIcon, FileText, User, Bell, Briefcase, 
+  ShoppingBag, LogOut, Users2, BarChart3, Sparkles, Menu, X 
+} from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { authStore } from '../services/authStore';
 import { CLIENT_BRAND } from '../constants';
@@ -12,6 +16,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const currentUser = authStore.getCurrentUser();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   if (!currentUser) return <>{children}</>;
 
@@ -30,30 +35,101 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     currentUser.role === 'admin' || (currentUser.permissions && currentUser.permissions[item.id as keyof typeof currentUser.permissions])
   );
 
+  const toggleMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col pb-24 lg:pb-0 lg:pl-64">
-      {/* Cabeçalho Mobile */}
-      <header className="sticky top-0 z-30 flex items-center justify-between px-6 py-4 bg-gray-50/80 backdrop-blur-md lg:hidden">
-        <div className="flex items-center gap-2">
-           <div className="p-1.5 bg-emerald-600 rounded-lg text-white"><Sparkles size={18}/></div>
-           <h1 className="text-xl font-black text-gray-900 tracking-tighter">{CLIENT_BRAND.name}</h1>
+    <div className="min-h-screen bg-gray-50 flex flex-col lg:pl-64">
+      {/* Cabeçalho Mobile - Aumentado z-index para ficar acima dos controles do mapa */}
+      <header className="sticky top-0 z-[1001] flex items-center justify-between px-6 py-4 bg-white/80 backdrop-blur-md border-b border-gray-100 lg:hidden">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={toggleMenu}
+            className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+            aria-label="Abrir menu"
+          >
+            <Menu size={24} />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-emerald-600 rounded-lg text-white"><Sparkles size={18}/></div>
+            <h1 className="text-xl font-black text-gray-900 tracking-tighter">{CLIENT_BRAND.name}</h1>
+          </div>
         </div>
         <div className="flex items-center gap-3">
-          <button className="p-2 bg-white rounded-full shadow-sm relative">
+          <button className="p-2 bg-white rounded-full shadow-sm border border-gray-100 relative">
             <Bell size={18} className="text-gray-600" />
             <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-          </button>
-          <button 
-            onClick={() => authStore.logout()}
-            className="p-2 bg-white rounded-full shadow-sm hover:text-red-500 transition-all"
-          >
-            <LogOut size={18} />
           </button>
         </div>
       </header>
 
-      {/* Sidebar Desktop Premium */}
-      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 p-6 shadow-2xl shadow-gray-200/50">
+      {/* Overlay do Menu Mobile - Elevado z-index para cobrir o mapa e controles (Leaflet controls are z-1000) */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 z-[5000] lg:hidden bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <aside 
+            className="w-4/5 max-w-sm h-full bg-white shadow-[25px_0_50px_-12px_rgba(0,0,0,0.5)] flex flex-col p-6 animate-in slide-in-from-left duration-300 relative z-[5001]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-gray-900 text-white rounded-2xl shadow-xl"><Sparkles size={20} /></div>
+                <h1 className="text-xl font-black text-gray-900 tracking-tighter">{CLIENT_BRAND.name}</h1>
+              </div>
+              <button 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-2 text-gray-400 hover:text-gray-900"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-2">
+              {allowedNavItems.map((item) => {
+                const isActive = location.pathname === item.path;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-4 px-4 py-4 rounded-2xl transition-all duration-300 group ${
+                      isActive 
+                        ? 'bg-gray-900 text-white shadow-xl' 
+                        : 'text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    <Icon size={20} className={isActive ? 'text-emerald-400' : 'text-gray-400'} />
+                    <span className="font-bold text-sm uppercase tracking-widest">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="pt-6 mt-6 border-t border-gray-100">
+              <div className="bg-gray-50 p-4 rounded-3xl flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white font-black shadow-lg ${currentUser.role === 'admin' ? 'bg-gray-900' : 'bg-emerald-500'}`}>
+                  {currentUser.name.substring(0, 1).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-black text-gray-900 truncate uppercase tracking-tighter">{currentUser.name}</p>
+                  <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">{currentUser.role === 'admin' ? 'Administrador' : 'Equipe Técnica'}</p>
+                </div>
+                <button 
+                  onClick={() => authStore.logout()}
+                  className="text-gray-300 hover:text-red-500 transition-colors"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
+
+      {/* Sidebar Desktop - Adicionado z-index para garantir que o mapa não a sobreponha com margens negativas */}
+      <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 p-6 shadow-2xl shadow-gray-200/50 z-[1000]">
         <div className="mb-10 group">
           <div className="flex items-center gap-3">
              <div className="p-2.5 bg-gray-900 text-white rounded-2xl shadow-xl transition-transform group-hover:rotate-12 duration-500"><Sparkles size={24} /></div>
@@ -111,32 +187,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       <main className="flex-1 px-4 sm:px-6 py-6 max-w-7xl mx-auto w-full min-h-screen">
         {children}
       </main>
-
-      {/* Navegação Flutuante Mobile Premium */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 lg:hidden w-full max-w-md px-6">
-        <nav className="glass bg-white/90 border border-white/50 shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-[32px] px-2 py-2 flex items-center justify-around gap-1 overflow-x-auto scrollbar-hide ring-1 ring-black/5">
-          {allowedNavItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`p-3.5 rounded-[24px] transition-all duration-500 flex-shrink-0 relative ${
-                  isActive 
-                    ? 'bg-gray-900 text-white shadow-2xl scale-110 -translate-y-1' 
-                    : 'text-gray-400 hover:text-emerald-500'
-                }`}
-              >
-                <Icon size={22} />
-                {isActive && (
-                   <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 bg-emerald-400 rounded-full" />
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
     </div>
   );
 };

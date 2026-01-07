@@ -4,7 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Camera, MapPin, CheckCircle2, Send, Loader2, X, 
   Activity, AlertTriangle, Bug, Ghost, Leaf, FileText, 
-  Clock, Calendar, History, ArrowRight, ChevronRight, Save, Plus
+  Clock, Calendar, History, ArrowRight, ChevronRight, Save, Plus,
+  ArrowLeft, Sparkles
 } from 'lucide-react';
 import { dataStore } from '../services/dataStore';
 import { generateRTVReport } from '../services/geminiService';
@@ -27,20 +28,41 @@ const VisitSession: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [report, setReport] = useState<{ summary: string; recommendations: string[] } | null>(null);
   const [checkInTime, setCheckInTime] = useState<string | null>(null);
+  const [checkOutTime, setCheckOutTime] = useState<string | null>(null);
 
-  // Fix: Converted synchronous data retrieval to async states
   const [visit, setVisit] = useState<Visit | null>(null);
   const [producer, setProducer] = useState<Producer | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
-      const visits = await dataStore.getVisits();
-      const producers = await dataStore.getProducers();
-      const v = visits.find(visit => visit.id === id);
+      const visitsData = await dataStore.getVisits();
+      const producersData = await dataStore.getProducers();
+      const v = visitsData.find(visit => visit.id === id);
+      
       if (v) {
         setVisit(v);
-        const prod = producers.find(p => p.id === v.producerId);
+        
+        // Se a visita já estiver completada, carrega os dados para o modo visualização
+        if (v.status === 'completed') {
+          setNotes(v.notes || '');
+          setPests(v.pests || '');
+          setDiseases(v.diseases || '');
+          setWeeds(v.weeds || '');
+          setPhotos(v.photos || []);
+          setCheckInTime(v.checkInTime || null);
+          setCheckOutTime(v.checkOutTime || null);
+          setReport({
+            summary: v.reportSummary || 'Relatório sem resumo.',
+            recommendations: (v.recommendations || '').split('\n').filter(r => r.trim() !== '')
+          });
+          setStep('summary');
+        } else if (v.status === 'ongoing') {
+          setCheckInTime(new Date().toISOString());
+          setStep('active');
+        }
+
+        const prod = producersData.find(p => p.id === v.producerId);
         if (prod) {
           setProducer(prod);
           const prop = prod.properties.find(p => p.id === v.propertyId);
@@ -50,17 +72,6 @@ const VisitSession: React.FC = () => {
     };
     loadData();
   }, [id]);
-
-  // Se a visita já foi completada e tentamos entrar nela, redireciona para o histórico
-  useEffect(() => {
-    if (visit?.status === 'completed') {
-      navigate(`/field/${visit.propertyId}`);
-    } else if (visit?.status === 'ongoing') {
-      // Se era uma visita iniciada agora ("ongoing"), já pula o check-in ou registra automaticamente
-      setCheckInTime(new Date().toISOString());
-      setStep('active');
-    }
-  }, [visit, navigate]);
 
   const handleCheckIn = () => {
     const now = new Date().toISOString();
@@ -95,7 +106,7 @@ const VisitSession: React.FC = () => {
     const aiReport = await generateRTVReport(fullNotesForAI, property.cropType);
     setReport(aiReport);
 
-    // 2. Preparar Dados da Visita Atualizada (Persistindo no histórico de visitas)
+    // 2. Preparar Dados da Visita Atualizada
     const updatedVisit: Visit = {
       ...visit,
       status: 'completed',
@@ -113,7 +124,7 @@ const VisitSession: React.FC = () => {
     // 3. Atualizar no DataStore
     await dataStore.updateVisit(updatedVisit);
     
-    // 4. Sincronizar dados para o monitoramento ATUAL do talhão (Visão de Dashboard)
+    // 4. Sincronizar dados para o monitoramento ATUAL do talhão
     const updatedMonitoring = {
       techNotes: notes,
       pests: pests || 'Área limpa',
@@ -137,15 +148,16 @@ const VisitSession: React.FC = () => {
   };
 
   const shareWhatsApp = () => {
-    const text = `*RELATÓRIO TÉCNICO DE CAMPO*\n*Cliente:* ${producer?.name}\n*Talhão:* ${property?.name}\n*Data:* ${new Date().toLocaleDateString('pt-BR')}\n\n*RESUMO:* ${report?.summary}\n\n*RECOMENDAÇÕES:*\n${report?.recommendations.map((r, i) => `${i+1}. ${r}`).join('\n')}`;
-    const phoneNumber = producer?.contacts.phone.replace(/\D/g, '') || '';
-    window.open(`https://wa.me/${phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
+    const text = `*RELATÓRIO TÉCNICO DE CAMPO*\n*Cliente:* ${producer?.name}\n*Talhão:* ${property?.name}\n*Data:* ${new Date(visit?.date || '').toLocaleDateString('pt-BR')}\n\n*RESUMO IA:* ${report?.summary}\n\n*RECOMENDAÇÕES:*\n${report?.recommendations.map((r, i) => `${i+1}. ${r}`).join('\n')}`;
+    const contact = producer?.contacts.list.find(c => c.isPrimary) || producer?.contacts;
+    const phone = (contact?.phone || '').replace(/\D/g, '');
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  if (!visit) return <div className="p-10 text-center font-bold">Visita não encontrada.</div>;
+  if (!visit) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto mb-4" /> Carregando registro...</div>;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-24">
+    <div className="max-w-3xl mx-auto space-y-6 pb-24 animate-in fade-in duration-500">
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -157,18 +169,19 @@ const VisitSession: React.FC = () => {
 
       {/* Cabeçalho de Contexto */}
       <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex justify-between items-center">
-        <div className="flex-1">
-          <h2 className="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em] mb-1">Sessão Técnica Ativa</h2>
-          <h1 className="text-xl font-bold text-gray-900 line-clamp-1">{property?.name}</h1>
-          <p className="text-xs text-gray-500 font-medium line-clamp-1">{producer?.name}</p>
+        <div className="flex items-center gap-4">
+          <button onClick={() => navigate(-1)} className="p-2 hover:bg-gray-50 rounded-xl transition-colors"><ArrowLeft size={20}/></button>
+          <div className="flex-1">
+            <h2 className="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em] mb-1">
+              {visit.status === 'completed' ? 'Histórico de Visita' : 'Sessão Técnica Ativa'}
+            </h2>
+            <h1 className="text-xl font-bold text-gray-900 line-clamp-1">{property?.name}</h1>
+            <p className="text-xs text-gray-500 font-medium line-clamp-1">{producer?.name}</p>
+          </div>
         </div>
         <div className="text-right">
           <span className="bg-gray-900 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase">{property?.cropType}</span>
-          {checkInTime && (
-            <p className="text-[9px] text-gray-400 mt-2 flex items-center justify-end gap-1">
-              <Clock size={10} /> Check-in: {new Date(checkInTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          )}
+          <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase">{new Date(visit.date).toLocaleDateString('pt-BR')}</p>
         </div>
       </div>
 
@@ -276,16 +289,33 @@ const VisitSession: React.FC = () => {
           <div className="bg-white rounded-[40px] p-10 shadow-2xl border border-gray-100 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-5 -rotate-12"><CheckCircle2 size={120} /></div>
             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-[24px] flex items-center justify-center mb-8 shadow-inner"><CheckCircle2 size={40} /></div>
-            <h3 className="text-3xl font-black text-gray-900 mb-6 tracking-tighter">Visita Registrada</h3>
+            
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-3xl font-black text-gray-900 tracking-tighter">Relatório Técnico</h3>
+                <p className="text-xs text-gray-400 font-bold uppercase">Consolidado em {new Date(visit.date).toLocaleDateString('pt-BR')}</p>
+              </div>
+              <div className="text-right">
+                {checkInTime && checkOutTime && (
+                  <p className="text-[10px] font-bold text-gray-400 uppercase flex items-center gap-1 justify-end">
+                    <Clock size={12} /> Tempo em campo: {Math.round((new Date(checkOutTime).getTime() - new Date(checkInTime).getTime()) / 60000)} min
+                  </p>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-8">
               <div>
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-3">Diagnóstico Consolidado (IA)</h4>
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+                  <Sparkles size={14} className="text-emerald-500" /> Diagnóstico Estratégico (IA)
+                </h4>
                 <div className="p-6 bg-emerald-50/50 rounded-[32px] border border-emerald-100/50">
                   <p className="text-gray-700 leading-relaxed text-sm font-medium italic">"{report.summary}"</p>
                 </div>
               </div>
+
               <div>
-                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Recomendações Técnicas</h4>
+                <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Recomendações da Visita</h4>
                 <ul className="space-y-4">
                   {report.recommendations.map((rec, i) => (
                     <li key={i} className="flex gap-4 items-start group">
@@ -295,11 +325,38 @@ const VisitSession: React.FC = () => {
                   ))}
                 </ul>
               </div>
+
+              <div className="pt-6 border-t border-gray-50 grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="space-y-3">
+                   <h5 className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Notas do Consultor</h5>
+                   <p className="text-xs text-gray-600 bg-gray-50 p-4 rounded-2xl border border-gray-100 min-h-[80px] leading-relaxed">{notes || 'Sem observações manuais.'}</p>
+                 </div>
+                 <div className="space-y-3">
+                   <h5 className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Alertas Sanitários</h5>
+                   <div className="grid grid-cols-1 gap-2">
+                      <div className="flex items-center gap-2 text-[11px] font-bold text-red-600 bg-red-50 p-2 rounded-xl"><Bug size={14}/> {pests || 'Limpo'}</div>
+                      <div className="flex items-center gap-2 text-[11px] font-bold text-orange-600 bg-orange-50 p-2 rounded-xl"><AlertTriangle size={14}/> {diseases || 'Monitorado'}</div>
+                   </div>
+                 </div>
+              </div>
+
+              {photos.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-4">Evidências Fotográficas</h4>
+                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                    {photos.map((p, idx) => (
+                      <div key={idx} className="w-24 h-24 rounded-2xl overflow-hidden shadow-sm border border-gray-100 flex-shrink-0">
+                        <img src={p} alt="Evidência" className="w-full h-full object-cover" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4">
-            <button onClick={shareWhatsApp} className="flex-1 bg-emerald-500 text-white py-5 rounded-[24px] font-bold shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all"><Send size={22} /> Compartilhar</button>
+            <button onClick={shareWhatsApp} className="flex-1 bg-emerald-500 text-white py-5 rounded-[24px] font-bold shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all"><Send size={22} /> Enviar para o Produtor</button>
             <button onClick={() => navigate(`/field/${property?.id}`)} className="flex-1 bg-gray-100 text-gray-900 py-5 rounded-[24px] font-bold hover:bg-gray-200 transition-colors">Voltar ao Talhão</button>
           </div>
         </div>

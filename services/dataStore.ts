@@ -46,7 +46,6 @@ export const dataStore = {
       const prodCount = await sql`SELECT count(*) FROM producers`;
       if (parseInt(prodCount[0].count) === 0) {
         for (const p of MOCK_PRODUCERS) {
-          // Fix: Use camelCase properties for Producer object
           await sql`
             INSERT INTO producers (id, name, farm_name, tax_id, client_type, status, location, legal, structure, contacts, commercial, history)
             VALUES (
@@ -60,7 +59,6 @@ export const dataStore = {
             )
           `;
           for (const prop of p.properties) {
-            // Fix: Use camelCase properties for Property object
             await sql`
               INSERT INTO properties (id, producer_id, name, area, crop_type, coordinates, polygon_coords, physical, soil_fertility, management, climate, economic, monitoring)
               VALUES (
@@ -163,7 +161,6 @@ export const dataStore = {
   },
 
   updateProducer: async (p: Producer) => {
-    // Fix: Use camelCase properties for Producer object
     await sql`
       INSERT INTO producers (id, name, farm_name, tax_id, client_type, status, location, legal, structure, contacts, commercial, history)
       VALUES (
@@ -184,7 +181,7 @@ export const dataStore = {
   },
 
   addProperty: async (producerId: string, prop: Property) => {
-    // Fix: Use camelCase properties for Property object
+    // FIX: Corrected target table and column count/names for properties
     await sql`
       INSERT INTO properties (id, producer_id, name, area, crop_type, coordinates, polygon_coords, physical, soil_fertility, management, climate, economic, monitoring)
       VALUES (
@@ -224,7 +221,7 @@ export const dataStore = {
   },
 
   updateVisit: async (v: Visit) => {
-    // Corrected property names from snake_case to camelCase on v to match the Visit interface.
+    // FIX: Fixed property names for Visit object (v.reportSummary and v.checkOutTime)
     await sql`
       UPDATE visits SET 
         status = ${v.status}, notes = ${v.notes}, pests = ${v.pests}, 
@@ -248,7 +245,6 @@ export const dataStore = {
   },
 
   addProposal: async (p: Proposal) => {
-    // Fix: Use camelCase properties for Proposal object
     await sql`
       INSERT INTO proposals (id, code, title, producer_id, contact_id, farm_name, total_value, payment_method, validity_date, safra, column_id, expected_closing_date, last_movement_date, closing_probability, description, ai_generated_content, activity_groups, conversation_history, next_contact_date, internal_notes)
       VALUES (
@@ -265,7 +261,7 @@ export const dataStore = {
   },
 
   updateProposal: async (p: Proposal) => {
-    // Fix: Use camelCase properties for Proposal object
+    // FIX: Fixed property names for Proposal object (p.internalNotes)
     await sql`
       UPDATE proposals SET 
         title = ${p.title}, producer_id = ${p.producerId}, contact_id = ${p.contactId}, farm_name = ${p.farmName}, 
@@ -298,11 +294,24 @@ export const dataStore = {
     return dataStore.getProposalColumns();
   },
 
-  deleteColumn: async (id: string) => {
-    await sql`DELETE FROM proposal_columns WHERE id = ${id}`;
-    const proposals = await dataStore.getProposals();
-    const columns = await dataStore.getProposalColumns();
-    return { proposals, proposalColumns: columns };
+  deleteColumn: async (targetId: string) => {
+    const columnsBefore = await dataStore.getProposalColumns();
+    const remainingCols = columnsBefore.filter(c => c.id !== targetId);
+    
+    if (remainingCols.length > 0) {
+      const fallbackId = remainingCols[0].id;
+      // Atualiza propostas órfãs para a primeira coluna disponível antes de deletar a etapa
+      await sql`UPDATE proposals SET column_id = ${fallbackId} WHERE column_id = ${targetId}`;
+    }
+
+    // Deleta a etapa de fato
+    await sql`DELETE FROM proposal_columns WHERE id = ${targetId}`;
+    
+    // Busca dados atualizados para retorno atômico ao frontend
+    const updatedProposals = await dataStore.getProposals();
+    const updatedColumns = await dataStore.getProposalColumns();
+    
+    return { proposals: updatedProposals, proposalColumns: updatedColumns };
   },
 
   getCatalog: async (): Promise<CatalogItem[]> => {
